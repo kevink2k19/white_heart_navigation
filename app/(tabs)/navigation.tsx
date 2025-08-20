@@ -26,9 +26,11 @@ import {
   Phone,
   ArrowLeft,
   Star,
+  Users,
 } from 'lucide-react-native';
 import { Linking } from 'react-native';
 import DropoffDialog from '@/components/DropoffDialog';
+import GroupMessageSender from '@/components/GroupMessageSender';
 
 const { width, height } = Dimensions.get('window');
 
@@ -220,6 +222,7 @@ export default function NavigationScreen() {
   const [speed, setSpeed] = useState(0);
   const [eta, setEta] = useState('--:--');
   const [showDropoffDialog, setShowDropoffDialog] = useState(false);
+  const [showGroupSender, setShowGroupSender] = useState(false);
 
   // Animation values
   const distanceAnim = useRef(new Animated.Value(INITIAL_DISTANCE)).current;
@@ -387,6 +390,18 @@ export default function NavigationScreen() {
 
   const dropOff = () => {
     setShowDropoffDialog(true);
+  };
+
+  const handleSendToGroups = () => {
+    setShowGroupSender(true);
+  };
+
+  const handleGroupSendComplete = (sentGroups: any[]) => {
+    Alert.alert(
+      'Order Shared',
+      `Order successfully shared with ${sentGroups.length} group${sentGroups.length > 1 ? 's' : ''}.`,
+      [{ text: 'OK' }]
+    );
   };
 
   const handleDropoffConfirm = () => {
@@ -680,6 +695,14 @@ export default function NavigationScreen() {
                 <Square size={20} color="white" />
                 <Text style={styles.controlButtonText}>Drop Off</Text>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.controlButton, styles.sendToGroupButton]}
+                onPress={handleSendToGroups}
+              >
+                <Users size={20} color="white" />
+                <Text style={styles.controlButtonText}>Send to Groups</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -698,6 +721,25 @@ export default function NavigationScreen() {
         onClose={() => setShowDropoffDialog(false)}
         onConfirm={handleDropoffConfirm}
         tripDetails={tripDetails}
+      />
+
+      {/* Group Message Sender */}
+      <GroupMessageSender
+        visible={showGroupSender}
+        onClose={() => setShowGroupSender(false)}
+        orderData={{
+          customerName: orderData.customerName,
+          customerPhone: orderData.customerPhone,
+          pickupLocation: orderData.pickupLocation,
+          destination: orderData.destination,
+          fareAmount: orderData.fareAmount,
+          distance: orderData.distance,
+          estimatedDuration: orderData.estimatedDuration,
+          customerRating: orderData.customerRating,
+          specialInstructions: '',
+          orderId: orderData.orderId,
+        }}
+        onSendComplete={handleGroupSendComplete}
       />
     </SafeAreaView>
   );
@@ -931,10 +973,11 @@ const styles = StyleSheet.create({
   },
   activeControls: {
     flexDirection: 'row',
-    gap: 12,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   controlButton: {
-    flex: 1,
+    minWidth: '45%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -954,6 +997,9 @@ const styles = StyleSheet.create({
   },
   dropOffButton: {
     backgroundColor: '#EF4444',
+  },
+  sendToGroupButton: {
+    backgroundColor: '#8B5CF6',
   },
   controlButtonText: {
     color: 'white',
