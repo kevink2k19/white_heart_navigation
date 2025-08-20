@@ -27,19 +27,42 @@ import {
   MicOff,
   Check,
   CheckCheck,
+  Phone,
+  User,
+  MapPin,
+  Clock,
+  DollarSign,
+  Star,
+  MessageSquare,
+  FileText,
 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { Linking } from 'react-native';
 
 interface Message {
   id: string;
   senderId: string;
   senderName: string;
   content: string;
-  type: 'text' | 'voice' | 'image' | 'podcast';
+  type: 'text' | 'voice' | 'image' | 'podcast' | 'order';
   timestamp: string;
   duration?: number; // for voice messages
   imageUrl?: string; // for image messages
   isRead: boolean;
   isDelivered: boolean;
+  orderData?: OrderData; // for order messages
+}
+
+interface OrderData {
+  customerName?: string;
+  customerPhone: string;
+  pickupLocation: string;
+  destination: string;
+  fareAmount: number;
+  distance: string;
+  estimatedDuration: string;
+  customerRating?: number;
+  specialInstructions?: string;
 }
 
 interface ChatGroup {
@@ -56,7 +79,7 @@ const mockGroups: ChatGroup[] = [
     id: '1',
     name: 'Downtown Drivers',
     memberCount: 24,
-    lastMessage: 'Traffic is heavy on Strand Road',
+    lastMessage: 'New order available - Airport pickup',
     lastMessageTime: '2 min ago',
     unreadCount: 3,
   },
@@ -64,7 +87,7 @@ const mockGroups: ChatGroup[] = [
     id: '2',
     name: 'Airport Route Drivers',
     memberCount: 18,
-    lastMessage: 'New passenger at Terminal 2',
+    lastMessage: 'Customer waiting at Terminal 2',
     lastMessageTime: '5 min ago',
     unreadCount: 1,
   },
@@ -93,11 +116,22 @@ const mockMessages: Message[] = [
     id: '2',
     senderId: 'user2',
     senderName: 'Ma Khin',
-    content: 'Thanks for the heads up! Taking Sule Pagoda route instead.',
-    type: 'text',
+    content: '',
+    type: 'order',
     timestamp: '10:32 AM',
     isRead: true,
     isDelivered: true,
+    orderData: {
+      customerName: 'Aung Kyaw',
+      customerPhone: '+95 9 123 456 789',
+      pickupLocation: 'Shwedagon Pagoda, Yangon',
+      destination: 'Yangon International Airport',
+      fareAmount: 15000,
+      distance: '18.5 km',
+      estimatedDuration: '35 min',
+      customerRating: 4.8,
+      specialInstructions: 'Customer prefers air conditioning',
+    },
   },
   {
     id: '3',
@@ -122,16 +156,34 @@ const mockMessages: Message[] = [
   },
 ];
 
+type MessageMode = 'text' | 'order';
+
 export default function MessagingScreen() {
+  const router = useRouter();
   const [selectedGroup, setSelectedGroup] = useState<ChatGroup | null>(null);
   const [messages, setMessages] = useState<Message[]>(mockMessages);
   const [inputText, setInputText] = useState('');
+  const [messageMode, setMessageMode] = useState<MessageMode>('text');
+  const [showOrderForm, setShowOrderForm] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isPodcastMode, setIsPodcastMode] = useState(false);
+
+  // Order form state
+  const [orderForm, setOrderForm] = useState<OrderData>({
+    customerName: '',
+    customerPhone: '',
+    pickupLocation: '',
+    destination: '',
+    fareAmount: 0,
+    distance: '',
+    estimatedDuration: '',
+    customerRating: 5.0,
+    specialInstructions: '',
+  });
 
   // Animation for recording button
   const recordingAnim = useRef(new Animated.Value(1)).current;
@@ -230,6 +282,108 @@ export default function MessagingScreen() {
     }
   };
 
+  const sendOrderMessage = () => {
+    // Validate required fields
+    if (!orderForm.customerPhone || !orderForm.pickupLocation || !orderForm.destination) {
+      Alert.alert('Error', 'Please fill in all required fields (phone, pickup, destination)');
+      return;
+    }
+
+    // Validate phone number
+    const phoneRegex = /^\+?[\d\s\-\(\)]{10,}$/;
+    if (!phoneRegex.test(orderForm.customerPhone)) {
+      Alert.alert('Error', 'Please enter a valid phone number');
+      return;
+    }
+
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      senderId: 'current_user',
+      senderName: 'You',
+      content: `Order: ${orderForm.pickupLocation} → ${orderForm.destination}`,
+      type: 'order',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isRead: false,
+      isDelivered: false,
+      orderData: { ...orderForm },
+    };
+
+    setMessages(prev => [...prev, newMessage]);
+    
+    // Reset form
+    setOrderForm({
+      customerName: '',
+      customerPhone: '',
+      pickupLocation: '',
+      destination: '',
+      fareAmount: 0,
+      distance: '',
+      estimatedDuration: '',
+      customerRating: 5.0,
+      specialInstructions: '',
+    });
+    
+    setShowOrderForm(false);
+    setMessageMode('text');
+  };
+
+  const handleAcceptOrder = async (orderData: OrderData, messageId: string) => {
+    try {
+      // Validate order data
+      if (!orderData.customerPhone || !orderData.pickupLocation || !orderData.destination) {
+        Alert.alert('Error', 'Incomplete order data. Cannot accept this order.');
+        return;
+      }
+
+      // Show confirmation
+      Alert.alert(
+        'Accept Order',
+        `Accept order for ${orderData.customerName || 'Customer'}?\n\nPickup: ${orderData.pickupLocation}\nDestination: ${orderData.destination}`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Accept',
+            onPress: () => {
+              // Navigate to navigation screen with order data
+              router.push({
+                pathname: '/(tabs)/navigation',
+                params: {
+                  orderId: messageId,
+                  customerName: orderData.customerName || 'Customer',
+                  customerPhone: orderData.customerPhone,
+                  customerRating: orderData.customerRating?.toString() || '5.0',
+                  pickupLocation: orderData.pickupLocation,
+                  destination: orderData.destination,
+                  fareAmount: orderData.fareAmount.toString(),
+                  distance: orderData.distance,
+                  estimatedDuration: orderData.estimatedDuration,
+                },
+              });
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error accepting order:', error);
+      Alert.alert('Error', 'Failed to accept order. Please try again.');
+    }
+  };
+
+  const handleCallCustomer = async (phoneNumber: string) => {
+    try {
+      const phoneUrl = `tel:${phoneNumber}`;
+      const canOpen = await Linking.canOpenURL(phoneUrl);
+      
+      if (canOpen) {
+        await Linking.openURL(phoneUrl);
+      } else {
+        Alert.alert('Error', 'Unable to make phone call from this device.');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to initiate phone call.');
+    }
+  };
+
   const playVoiceMessage = (messageId: string) => {
     if (playingMessageId === messageId) {
       setPlayingMessageId(null);
@@ -248,6 +402,17 @@ export default function MessagingScreen() {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const renderStars = (rating: number) => {
+    return Array.from({ length: 5 }, (_, index) => (
+      <Star
+        key={index}
+        size={12}
+        color={index < Math.floor(rating) ? '#F59E0B' : '#E5E7EB'}
+        fill={index < Math.floor(rating) ? '#F59E0B' : '#E5E7EB'}
+      />
+    ));
   };
 
   const renderMessage = (message: Message) => {
@@ -269,6 +434,87 @@ export default function MessagingScreen() {
           ]}>
             {message.content}
           </Text>
+        )}
+
+        {message.type === 'order' && message.orderData && (
+          <View style={styles.orderMessageContainer}>
+            <View style={styles.orderHeader}>
+              <View style={styles.orderIcon}>
+                <FileText size={20} color="#3B82F6" />
+              </View>
+              <Text style={styles.orderTitle}>New Order Available</Text>
+            </View>
+            
+            <View style={styles.orderContent}>
+              {message.orderData.customerName && (
+                <View style={styles.orderRow}>
+                  <User size={16} color="#6B7280" />
+                  <Text style={styles.orderLabel}>Customer:</Text>
+                  <Text style={styles.orderValue}>{message.orderData.customerName}</Text>
+                  {message.orderData.customerRating && (
+                    <View style={styles.orderRating}>
+                      <View style={styles.orderStars}>
+                        {renderStars(message.orderData.customerRating)}
+                      </View>
+                      <Text style={styles.orderRatingText}>{message.orderData.customerRating}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+              
+              <View style={styles.orderRow}>
+                <Phone size={16} color="#6B7280" />
+                <Text style={styles.orderLabel}>Phone:</Text>
+                <TouchableOpacity onPress={() => handleCallCustomer(message.orderData!.customerPhone)}>
+                  <Text style={[styles.orderValue, styles.phoneLink]}>{message.orderData.customerPhone}</Text>
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.routeContainer}>
+                <View style={styles.routePoint}>
+                  <View style={[styles.routeDot, { backgroundColor: '#10B981' }]} />
+                  <Text style={styles.routeText}>{message.orderData.pickupLocation}</Text>
+                </View>
+                <View style={styles.routeLine} />
+                <View style={styles.routePoint}>
+                  <View style={[styles.routeDot, { backgroundColor: '#EF4444' }]} />
+                  <Text style={styles.routeText}>{message.orderData.destination}</Text>
+                </View>
+              </View>
+              
+              <View style={styles.orderMetrics}>
+                <View style={styles.metricItem}>
+                  <MapPin size={14} color="#6B7280" />
+                  <Text style={styles.metricText}>{message.orderData.distance}</Text>
+                </View>
+                <View style={styles.metricItem}>
+                  <Clock size={14} color="#6B7280" />
+                  <Text style={styles.metricText}>{message.orderData.estimatedDuration}</Text>
+                </View>
+                <View style={styles.metricItem}>
+                  <DollarSign size={14} color="#10B981" />
+                  <Text style={[styles.metricText, styles.fareText]}>{message.orderData.fareAmount.toLocaleString()} MMK</Text>
+                </View>
+              </View>
+              
+              {message.orderData.specialInstructions && (
+                <View style={styles.instructionsContainer}>
+                  <Text style={styles.instructionsLabel}>Special Instructions:</Text>
+                  <Text style={styles.instructionsText}>{message.orderData.specialInstructions}</Text>
+                </View>
+              )}
+            </View>
+            
+            {!isCurrentUser && (
+              <TouchableOpacity
+                style={styles.acceptOrderButton}
+                onPress={() => handleAcceptOrder(message.orderData!, message.id)}
+              >
+                <Check size={16} color="white" />
+                <Text style={styles.acceptOrderText}>Accept Order</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         )}
 
         {(message.type === 'voice' || message.type === 'podcast') && (
@@ -339,6 +585,135 @@ export default function MessagingScreen() {
       </View>
     );
   };
+
+  const renderOrderForm = () => (
+    <Modal
+      visible={showOrderForm}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowOrderForm(false)}
+    >
+      <View style={styles.orderFormOverlay}>
+        <View style={styles.orderFormContainer}>
+          <View style={styles.orderFormHeader}>
+            <Text style={styles.orderFormTitle}>Create Order Message</Text>
+            <TouchableOpacity
+              onPress={() => setShowOrderForm(false)}
+              style={styles.orderFormClose}
+            >
+              <X size={24} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.orderFormContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Customer Name (Optional)</Text>
+              <TextInput
+                style={styles.formInput}
+                value={orderForm.customerName}
+                onChangeText={(text) => setOrderForm({...orderForm, customerName: text})}
+                placeholder="Enter customer name"
+              />
+            </View>
+            
+            <View style={styles.formGroup}>
+              <Text style={[styles.formLabel, styles.requiredField]}>Customer Phone *</Text>
+              <TextInput
+                style={styles.formInput}
+                value={orderForm.customerPhone}
+                onChangeText={(text) => setOrderForm({...orderForm, customerPhone: text})}
+                placeholder="+95 9 123 456 789"
+                keyboardType="phone-pad"
+              />
+            </View>
+            
+            <View style={styles.formGroup}>
+              <Text style={[styles.formLabel, styles.requiredField]}>Pickup Location *</Text>
+              <TextInput
+                style={styles.formInput}
+                value={orderForm.pickupLocation}
+                onChangeText={(text) => setOrderForm({...orderForm, pickupLocation: text})}
+                placeholder="Enter pickup location"
+                multiline
+              />
+            </View>
+            
+            <View style={styles.formGroup}>
+              <Text style={[styles.formLabel, styles.requiredField]}>Destination *</Text>
+              <TextInput
+                style={styles.formInput}
+                value={orderForm.destination}
+                onChangeText={(text) => setOrderForm({...orderForm, destination: text})}
+                placeholder="Enter destination"
+                multiline
+              />
+            </View>
+            
+            <View style={styles.formRow}>
+              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+                <Text style={styles.formLabel}>Distance</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={orderForm.distance}
+                  onChangeText={(text) => setOrderForm({...orderForm, distance: text})}
+                  placeholder="e.g., 15.2 km"
+                />
+              </View>
+              
+              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
+                <Text style={styles.formLabel}>Duration</Text>
+                <TextInput
+                  style={styles.formInput}
+                  value={orderForm.estimatedDuration}
+                  onChangeText={(text) => setOrderForm({...orderForm, estimatedDuration: text})}
+                  placeholder="e.g., 25 min"
+                />
+              </View>
+            </View>
+            
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Fare Amount (MMK)</Text>
+              <TextInput
+                style={styles.formInput}
+                value={orderForm.fareAmount.toString()}
+                onChangeText={(text) => setOrderForm({...orderForm, fareAmount: parseInt(text) || 0})}
+                placeholder="15000"
+                keyboardType="numeric"
+              />
+            </View>
+            
+            <View style={styles.formGroup}>
+              <Text style={styles.formLabel}>Special Instructions</Text>
+              <TextInput
+                style={[styles.formInput, styles.textArea]}
+                value={orderForm.specialInstructions}
+                onChangeText={(text) => setOrderForm({...orderForm, specialInstructions: text})}
+                placeholder="Any special requirements or notes..."
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+          </ScrollView>
+          
+          <View style={styles.orderFormActions}>
+            <TouchableOpacity
+              style={styles.orderFormCancel}
+              onPress={() => setShowOrderForm(false)}
+            >
+              <Text style={styles.orderFormCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.orderFormSend}
+              onPress={sendOrderMessage}
+            >
+              <Send size={16} color="white" />
+              <Text style={styles.orderFormSendText}>Send Order</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
 
   const renderGroupList = () => (
     <View style={styles.groupList}>
@@ -418,54 +793,93 @@ export default function MessagingScreen() {
         </View>
       )}
 
-      {/* Input Area */}
-      <View style={styles.inputContainer}>
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.textInput}
-            placeholder="Type a message..."
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-            maxLength={500}
-          />
-          
-          <View style={styles.inputActions}>
-            <TouchableOpacity style={styles.attachButton}>
-              <Camera size={20} color="#6B7280" />
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.attachButton}>
-              <ImageIcon size={20} color="#6B7280" />
-            </TouchableOpacity>
-
-            {inputText.trim() ? (
-              <TouchableOpacity style={styles.sendButton} onPress={sendTextMessage}>
-                <Send size={20} color="white" />
-              </TouchableOpacity>
-            ) : (
-              <Animated.View
-                style={[styles.micButton, { transform: [{ scale: recordingAnim }] }]}
-                {...panResponder.panHandlers}
-              >
-                <TouchableOpacity style={styles.micButtonInner}>
-                  {isRecording ? (
-                    <MicOff size={20} color="white" />
-                  ) : (
-                    <Mic size={20} color="white" />
-                  )}
-                </TouchableOpacity>
-              </Animated.View>
-            )}
-          </View>
-        </View>
+      {/* Message Mode Selector */}
+      <View style={styles.modeSelector}>
+        <TouchableOpacity
+          style={[
+            styles.modeButton,
+            messageMode === 'text' && styles.modeButtonActive
+          ]}
+          onPress={() => setMessageMode('text')}
+        >
+          <MessageSquare size={16} color={messageMode === 'text' ? 'white' : '#6B7280'} />
+          <Text style={[
+            styles.modeButtonText,
+            messageMode === 'text' && styles.modeButtonTextActive
+          ]}>Text</Text>
+        </TouchableOpacity>
         
-        {isPodcastMode && (
-          <Text style={styles.podcastModeText}>
-            🎙️ Podcast mode: Long-press mic for walkie-talkie style recording
-          </Text>
-        )}
+        <TouchableOpacity
+          style={[
+            styles.modeButton,
+            messageMode === 'order' && styles.modeButtonActive
+          ]}
+          onPress={() => {
+            setMessageMode('order');
+            setShowOrderForm(true);
+          }}
+        >
+          <FileText size={16} color={messageMode === 'order' ? 'white' : '#6B7280'} />
+          <Text style={[
+            styles.modeButtonText,
+            messageMode === 'order' && styles.modeButtonTextActive
+          ]}>Order</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* Input Area */}
+      {messageMode === 'text' && (
+        <View style={styles.inputContainer}>
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Type a message..."
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+              maxLength={500}
+            />
+            
+            <View style={styles.inputActions}>
+              <TouchableOpacity style={styles.attachButton}>
+                <Camera size={20} color="#6B7280" />
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.attachButton}>
+                <ImageIcon size={20} color="#6B7280" />
+              </TouchableOpacity>
+
+              {inputText.trim() ? (
+                <TouchableOpacity style={styles.sendButton} onPress={sendTextMessage}>
+                  <Send size={20} color="white" />
+                </TouchableOpacity>
+              ) : (
+                <Animated.View
+                  style={[styles.micButton, { transform: [{ scale: recordingAnim }] }]}
+                  {...panResponder.panHandlers}
+                >
+                  <TouchableOpacity style={styles.micButtonInner}>
+                    {isRecording ? (
+                      <MicOff size={20} color="white" />
+                    ) : (
+                      <Mic size={20} color="white" />
+                    )}
+                  </TouchableOpacity>
+                </Animated.View>
+              )}
+            </View>
+          </View>
+          
+          {isPodcastMode && (
+            <Text style={styles.podcastModeText}>
+              🎙️ Podcast mode: Long-press mic for walkie-talkie style recording
+            </Text>
+          )}
+        </View>
+      )}
+
+      {/* Order Form Modal */}
+      {renderOrderForm()}
     </View>
   );
 
@@ -683,6 +1097,150 @@ const styles = StyleSheet.create({
   otherUserText: {
     color: '#1F2937',
   },
+  orderMessageContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    minWidth: 280,
+  },
+  orderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  orderIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#EBF4FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  orderTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  orderContent: {
+    marginBottom: 12,
+  },
+  orderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  orderLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 8,
+    marginRight: 4,
+    fontWeight: '500',
+  },
+  orderValue: {
+    fontSize: 14,
+    color: '#1F2937',
+    fontWeight: '500',
+    flex: 1,
+  },
+  phoneLink: {
+    color: '#3B82F6',
+    textDecorationLine: 'underline',
+  },
+  orderRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  orderStars: {
+    flexDirection: 'row',
+    marginRight: 4,
+  },
+  orderRatingText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  routeContainer: {
+    marginVertical: 8,
+  },
+  routePoint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  routeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  routeText: {
+    fontSize: 14,
+    color: '#374151',
+    flex: 1,
+  },
+  routeLine: {
+    width: 2,
+    height: 12,
+    backgroundColor: '#D1D5DB',
+    marginLeft: 3,
+    marginVertical: -2,
+  },
+  orderMetrics: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: 'white',
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  metricItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  metricText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginLeft: 4,
+    fontWeight: '500',
+  },
+  fareText: {
+    color: '#10B981',
+    fontWeight: '600',
+  },
+  instructionsContainer: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 6,
+  },
+  instructionsLabel: {
+    fontSize: 12,
+    color: '#92400E',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  instructionsText: {
+    fontSize: 12,
+    color: '#92400E',
+  },
+  acceptOrderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  acceptOrderText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   voiceMessageContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -759,6 +1317,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.8,
   },
+  modeSelector: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    gap: 8,
+  },
+  modeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    gap: 6,
+  },
+  modeButtonActive: {
+    backgroundColor: '#3B82F6',
+  },
+  modeButtonText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  modeButtonTextActive: {
+    color: 'white',
+  },
   inputContainer: {
     backgroundColor: 'white',
     borderTopWidth: 1,
@@ -819,6 +1406,108 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
     fontStyle: 'italic',
+  },
+  orderFormOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  orderFormContainer: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+  },
+  orderFormHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  orderFormTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  orderFormClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orderFormContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    maxHeight: 400,
+  },
+  formGroup: {
+    marginBottom: 16,
+  },
+  formRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  requiredField: {
+    color: '#EF4444',
+  },
+  formInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: '#1F2937',
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  orderFormActions: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    gap: 12,
+  },
+  orderFormCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+  },
+  orderFormCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  orderFormSend: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#3B82F6',
+    gap: 6,
+  },
+  orderFormSendText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
   },
   imageModalOverlay: {
     flex: 1,
