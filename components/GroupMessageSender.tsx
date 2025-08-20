@@ -11,23 +11,7 @@ import {
   ActivityIndicator,
   Animated,
 } from 'react-native';
-import {
-  Users,
-  Search,
-  X,
-  Check,
-  Send,
-  AlertCircle,
-  Wifi,
-  WifiOff,
-  ChevronRight,
-  MessageSquare,
-  Navigation,
-  MapPin,
-  Clock,
-  DollarSign,
-  Star,
-} from 'lucide-react-native';
+import { Users, Search, X, Check, Send, CircleAlert as AlertCircle, Wifi, WifiOff, ChevronRight, MessageSquare, Navigation, MapPin, Clock, DollarSign, Star } from 'lucide-react-native';
 
 interface Group {
   id: string;
