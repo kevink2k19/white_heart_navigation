@@ -519,4 +519,18 @@ const styles = StyleSheet.create({
     color: '#374151',
     marginBottom: 4,
   },
+  customerInfoText: {
+    fontSize: 14,
+    color: '#1F2937',
+    fontWeight: '500',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  orderIdText: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '400',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
 });

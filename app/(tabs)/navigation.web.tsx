@@ -8,6 +8,7 @@ import {
   Dimensions,
   Alert,
   BackHandler,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -23,6 +24,7 @@ import {
   Phone,
   ArrowLeft,
   Star,
+  X,
 } from 'lucide-react-native';
 import { Linking } from 'react-native';
 import DropoffDialog from '@/components/DropoffDialog';
@@ -56,7 +58,7 @@ export default function NavigationScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   
-  // Extract and validate order details from navigation params
+  // Extract order details from navigation params (optional - may be empty)
   const orderData: OrderData = {
     orderId: params.orderId as string || '',
     customerName: params.customerName as string || '',
@@ -69,45 +71,9 @@ export default function NavigationScreen() {
     customerRating: params.customerRating ? parseFloat(params.customerRating as string) : 0,
   };
 
-  // Validate required order data with comprehensive error handling
-  useEffect(() => {
-    const validateOrderData = () => {
-      const requiredFields = [
-        { field: 'orderId', value: orderData.orderId, label: 'Order ID' },
-        { field: 'customerName', value: orderData.customerName, label: 'Customer Name' },
-        { field: 'customerPhone', value: orderData.customerPhone, label: 'Customer Phone' },
-        { field: 'pickupLocation', value: orderData.pickupLocation, label: 'Pickup Location' },
-        { field: 'destination', value: orderData.destination, label: 'Destination' },
-      ];
-
-      const missingFields = requiredFields.filter(({ value }) => !value);
-      
-      if (missingFields.length > 0) {
-        const missingLabels = missingFields.map(({ label }) => label).join(', ');
-        Alert.alert(
-          'Incomplete Order Data',
-          `Missing required information: ${missingLabels}. Returning to orders list.`,
-          [
-            { text: 'OK', onPress: () => router.back() },
-            { text: 'Retry', onPress: () => router.back() }
-          ]
-        );
-        return false;
-      }
-      return true;
-    };
-
-    if (!validateOrderData()) {
-      return;
-    }
-
-    // Log successful order data validation
-    console.log('Order data validated successfully:', {
-      orderId: orderData.orderId,
-      customerName: orderData.customerName,
-      hasPhone: !!orderData.customerPhone,
-    });
-  }, [orderData, router]);
+  // Check if we have complete order data
+  const hasCompleteOrderData = orderData.orderId && orderData.customerName && 
+    orderData.customerPhone && orderData.pickupLocation && orderData.destination;
 
   // Enhanced phone call handler with comprehensive error handling
   const handleCallCustomer = async () => {
@@ -186,16 +152,30 @@ export default function NavigationScreen() {
   const [speed, setSpeed] = useState(0);
   const [eta, setEta] = useState('--:--');
   const [showDropoffDialog, setShowDropoffDialog] = useState(false);
+  const [showCancelButton, setShowCancelButton] = useState(false);
 
   // Animation values
   const distanceAnim = useRef(new Animated.Value(INITIAL_DISTANCE)).current;
   const fareAnim = useRef(new Animated.Value(INITIAL_DISTANCE * FARE_RATE)).current;
   const buttonScaleAnim = useRef(new Animated.Value(1)).current;
+  const buttonsOpacityAnim = useRef(new Animated.Value(0)).current;
 
   // Timers
   const tripTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    // Initialize immediately without loading delays
+    setShowCancelButton(!!hasCompleteOrderData);
+    
+    // Animate buttons in smoothly
+    setTimeout(() => {
+      Animated.timing(buttonsOpacityAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    }, 100);
+    
     return () => {
       if (tripTimer.current) clearInterval(tripTimer.current);
     };
@@ -323,6 +303,44 @@ export default function NavigationScreen() {
     setEta('--:--');
   };
 
+  const handleCancelOrder = () => {
+    Alert.alert(
+      'Cancel Order',
+      'Are you sure you want to cancel this order? All order data will be cleared.',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: () => {
+            // Clear all timers
+            if (tripTimer.current) clearInterval(tripTimer.current);
+            
+            // Reset trip state
+            setTripState({
+              status: 'idle',
+              startTime: null,
+              restStartTime: null,
+              totalRestTime: 0,
+            });
+            
+            // Reset counters
+            setDistance(INITIAL_DISTANCE);
+            setFare(INITIAL_DISTANCE * FARE_RATE);
+            distanceAnim.setValue(INITIAL_DISTANCE);
+            fareAnim.setValue(INITIAL_DISTANCE * FARE_RATE);
+            setEta('--:--');
+            
+            // Hide cancel button
+            setShowCancelButton(false);
+            
+            // Navigate back to orders tab to clear order data
+            router.replace('/(tabs)/');
+          },
+        },
+      ]
+    );
+  };
   const tripDetails = {
     distance,
     duration: tripState.startTime 
@@ -334,198 +352,265 @@ export default function NavigationScreen() {
       ? new Date(tripState.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       : '--:--',
     endTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    pickupLocation: orderData.pickupLocation || 'Current Location',
-    dropoffLocation: orderData.destination || 'Destination',
-    customerName: orderData.customerName,
-    customerPhone: orderData.customerPhone,
-    orderId: orderData.orderId,
+    pickupLocation: hasCompleteOrderData ? orderData.pickupLocation : 'Current Location',
+    dropoffLocation: hasCompleteOrderData ? orderData.destination : 'Destination',
+    customerName: hasCompleteOrderData ? orderData.customerName : undefined,
+    customerPhone: hasCompleteOrderData ? orderData.customerPhone : undefined,
+    orderId: hasCompleteOrderData ? orderData.orderId : undefined,
   };
-
-  // Show error if order data is incomplete
-  if (!orderData.orderId) {
-    return null; // Will be handled by the useEffect above
-  }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Enhanced Customer Info Header */}
-      <View style={styles.headerContainer}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => {
-            if (tripState.status === 'active' || tripState.status === 'resting') {
-              Alert.alert(
-                'Trip in Progress',
-                'You have an active trip. Are you sure you want to go back?',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Yes', onPress: () => router.back() },
-                ]
-              );
-            } else {
-              router.back();
-            }
-          }}
-        >
-          <ArrowLeft size={24} color="#1F2937" />
-        </TouchableOpacity>
-        
-        <View style={styles.customerHeader}>
-          <View style={styles.customerInfo}>
-            <View style={styles.customerNameRow}>
-              <Text style={styles.customerName}>{orderData.customerName}</Text>
-              <View style={styles.ratingContainer}>
-                <View style={styles.stars}>
-                  {renderStars(orderData.customerRating)}
+      <ScrollView 
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Enhanced Customer Info Header - Only show if we have complete order data */}
+        {hasCompleteOrderData ? (
+          <View style={styles.headerContainer}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => {
+                if (tripState.status === 'active' || tripState.status === 'resting') {
+                  Alert.alert(
+                    'Trip in Progress',
+                    'You have an active trip. Are you sure you want to go back?',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Yes', onPress: () => router.back() },
+                    ]
+                  );
+                } else {
+                  router.back();
+                }
+              }}
+            >
+              <ArrowLeft size={24} color="#1F2937" />
+            </TouchableOpacity>
+            
+            <View style={styles.customerHeader}>
+              <View style={styles.customerInfo}>
+                <View style={styles.customerNameRow}>
+                  <Text style={styles.customerName}>{orderData.customerName}</Text>
+                  <View style={styles.ratingContainer}>
+                    <View style={styles.stars}>
+                      {renderStars(orderData.customerRating)}
+                    </View>
+                    <Text style={styles.ratingText}>{orderData.customerRating}</Text>
+                  </View>
                 </View>
-                <Text style={styles.ratingText}>{orderData.customerRating}</Text>
+                <Text style={styles.customerPhone}>{orderData.customerPhone}</Text>
+                <Text style={styles.orderInfo}>Order #{orderData.orderId}</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.callButton}
+                onPress={handleCallCustomer}
+              >
+                <Phone size={20} color="white" />
+                <Text style={styles.callButtonText}>Call</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.headerContainer}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => router.back()}
+            >
+              <ArrowLeft size={24} color="#1F2937" />
+            </TouchableOpacity>
+            
+            <View style={styles.customerHeader}>
+              <View style={styles.customerInfo}>
+                <Text style={styles.customerName}>Navigation</Text>
+                <Text style={styles.customerPhone}>No active order</Text>
               </View>
             </View>
-            <Text style={styles.customerPhone}>{orderData.customerPhone}</Text>
-            <Text style={styles.orderInfo}>Order #{orderData.orderId}</Text>
           </View>
-          <TouchableOpacity 
-            style={styles.callButton}
-            onPress={handleCallCustomer}
-          >
-            <Phone size={20} color="white" />
-            <Text style={styles.callButtonText}>Call</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+        )}
 
-      {/* Order Summary Card */}
-      <View style={styles.orderSummaryCard}>
-        <View style={styles.routeInfo}>
-          <View style={styles.routePoint}>
-            <View style={[styles.routeDot, { backgroundColor: '#10B981' }]} />
-            <Text style={styles.routeText} numberOfLines={1}>{orderData.pickupLocation}</Text>
+        {/* Order Summary Card - Only show if we have complete order data */}
+        {hasCompleteOrderData && (
+          <View style={styles.orderSummaryCard}>
+            <View style={styles.routeInfo}>
+              <View style={styles.routePoint}>
+                <View style={[styles.routeDot, { backgroundColor: '#10B981' }]} />
+                <Text style={styles.routeText} numberOfLines={1}>{orderData.pickupLocation}</Text>
+              </View>
+              <View style={styles.routePoint}>
+                <View style={[styles.routeDot, { backgroundColor: '#EF4444' }]} />
+                <Text style={styles.routeText} numberOfLines={1}>{orderData.destination}</Text>
+              </View>
+            </View>
+            <View style={styles.orderMetrics}>
+              <Text style={styles.metricText}>{orderData.distance}</Text>
+              <Text style={styles.metricText}>{orderData.estimatedDuration}</Text>
+              <Text style={[styles.metricText, styles.fareText]}>{orderData.fareAmount.toLocaleString()} MMK</Text>
+            </View>
           </View>
-          <View style={styles.routePoint}>
-            <View style={[styles.routeDot, { backgroundColor: '#EF4444' }]} />
-            <Text style={styles.routeText} numberOfLines={1}>{orderData.destination}</Text>
+        )}
+
+        {/* No Order State - Show when no order data is available */}
+        {!hasCompleteOrderData && (
+          <View style={styles.noOrderCard}>
+            <View style={styles.noOrderIcon}>
+              <NavigationIcon size={48} color="#6B7280" />
+            </View>
+            <Text style={styles.noOrderTitle}>No Active Order</Text>
+            <Text style={styles.noOrderText}>
+              Accept an order from the Orders tab to start navigation
+            </Text>
+            <TouchableOpacity 
+              style={styles.goToOrdersButton}
+              onPress={() => router.push('/(tabs)/')}
+            >
+              <Text style={styles.goToOrdersButtonText}>Go to Orders</Text>
+            </TouchableOpacity>
           </View>
-        </View>
-        <View style={styles.orderMetrics}>
-          <Text style={styles.metricText}>{orderData.distance}</Text>
-          <Text style={styles.metricText}>{orderData.estimatedDuration}</Text>
-          <Text style={[styles.metricText, styles.fareText]}>{orderData.fareAmount.toLocaleString()} MMK</Text>
-        </View>
-      </View>
+        )}
 
-      {/* Map Placeholder for Web */}
-      <View style={styles.mapContainer}>
-        <View style={styles.mapPlaceholder}>
-          <MapPin size={48} color="#6B7280" />
-          <Text style={styles.placeholderTitle}>Navigation Map</Text>
-          <Text style={styles.placeholderText}>
-            Interactive maps are not available on web platform.
-            {'\n'}Use the mobile app for full navigation features.
-          </Text>
-        </View>
-
-        {/* Trip Status Overlay */}
-        <View style={styles.statusOverlay}>
-          <View style={[
-            styles.statusBadge,
-            tripState.status === 'active' && styles.activeBadge,
-            tripState.status === 'resting' && styles.restingBadge,
-            tripState.status === 'completed' && styles.completedBadge,
-          ]}>
-            <Text style={styles.statusText}>
-              {tripState.status === 'idle' && 'Ready to Start'}
-              {tripState.status === 'active' && 'Trip Active'}
-              {tripState.status === 'resting' && 'Resting'}
-              {tripState.status === 'completed' && 'Completed'}
+        {/* Map Placeholder for Web */}
+        <View style={styles.mapContainer}>
+          <View style={styles.mapPlaceholder}>
+            <MapPin size={48} color="#6B7280" />
+            <Text style={styles.placeholderTitle}>Navigation Map</Text>
+            <Text style={styles.placeholderText}>
+              Interactive maps are not available on web platform.
+              {'\n'}Use the mobile app for full navigation features.
             </Text>
           </View>
-        </View>
-      </View>
 
-      {/* Trip Information Panel */}
-      <View style={[styles.infoPanel, { paddingBottom: Math.max(20, insets.bottom + 10) }]}>
-        <View style={styles.countersContainer}>
-          <View style={styles.counterItem}>
-            <NavigationIcon size={20} color="#6B7280" />
-            <Animated.Text style={styles.counterValue}>
-              {distance.toFixed(1)}
-            </Animated.Text>
-            <Text style={styles.counterLabel}>km</Text>
-          </View>
-
-          <View style={styles.counterItem}>
-            <DollarSign size={20} color="#10B981" />
-            <Animated.Text style={styles.counterValue}>
-              {fare.toFixed(0)}
-            </Animated.Text>
-            <Text style={styles.counterLabel}>MMK</Text>
-          </View>
-
-          <View style={styles.counterItem}>
-            <Clock size={20} color="#F59E0B" />
-            <Text style={styles.counterValue}>{eta}</Text>
-            <Text style={styles.counterLabel}>ETA</Text>
-          </View>
-
-          <View style={styles.counterItem}>
-            <Zap size={20} color="#8B5CF6" />
-            <Text style={styles.counterValue}>{Math.round(speed)}</Text>
-            <Text style={styles.counterLabel}>km/h</Text>
-          </View>
-        </View>
-
-        {/* Control Buttons */}
-        <View style={styles.controlsContainer}>
-          {tripState.status === 'idle' && (
-            <Animated.View style={{ transform: [{ scale: buttonScaleAnim }] }}>
-              <TouchableOpacity style={styles.startButton} onPress={startTrip}>
-                <Play size={24} color="white" />
-                <Text style={styles.startButtonText}>Start Trip</Text>
-              </TouchableOpacity>
-            </Animated.View>
-          )}
-
-          {(tripState.status === 'active' || tripState.status === 'resting') && (
-            <View style={styles.activeControls}>
-              <TouchableOpacity
-                style={[
-                  styles.controlButton,
-                  styles.restButton,
-                  tripState.status === 'resting' && styles.continueButton,
-                ]}
-                onPress={toggleRest}
-              >
-                {tripState.status === 'resting' ? (
-                  <>
-                    <Play size={20} color="white" />
-                    <Text style={styles.controlButtonText}>Continue</Text>
-                  </>
-                ) : (
-                  <>
-                    <Pause size={20} color="white" />
-                    <Text style={styles.controlButtonText}>Rest</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.controlButton, styles.dropOffButton]}
-                onPress={dropOff}
-              >
-                <Square size={20} color="white" />
-                <Text style={styles.controlButtonText}>Drop Off</Text>
-              </TouchableOpacity>
+          {/* Trip Status Overlay */}
+          <View style={styles.statusOverlay}>
+            <View style={[
+              styles.statusBadge,
+              tripState.status === 'active' && styles.activeBadge,
+              tripState.status === 'resting' && styles.restingBadge,
+              tripState.status === 'completed' && styles.completedBadge,
+            ]}>
+              <Text style={styles.statusText}>
+                {tripState.status === 'idle' && 'Ready to Start'}
+                {tripState.status === 'active' && 'Trip Active'}
+                {tripState.status === 'resting' && 'Resting'}
+                {tripState.status === 'completed' && 'Completed'}
+              </Text>
             </View>
-          )}
-
-          {tripState.status === 'completed' && (
-            <TouchableOpacity style={styles.resetButton} onPress={resetTrip}>
-              <NavigationIcon size={20} color="white" />
-              <Text style={styles.resetButtonText}>New Trip</Text>
-            </TouchableOpacity>
-          )}
+          </View>
         </View>
-      </View>
+
+        {/* Trip Information Panel */}
+        <Animated.View style={[
+          styles.infoPanel, 
+          { 
+            paddingBottom: Math.max(20, insets.bottom + 10),
+            opacity: buttonsOpacityAnim 
+          }
+        ]}>
+          <View style={styles.countersContainer}>
+            <View style={styles.counterItem}>
+              <NavigationIcon size={20} color="#6B7280" />
+              <Animated.Text style={styles.counterValue}>
+                {distance.toFixed(1)}
+              </Animated.Text>
+              <Text style={styles.counterLabel}>km</Text>
+            </View>
+
+            <View style={styles.counterItem}>
+              <DollarSign size={20} color="#10B981" />
+              <Animated.Text style={styles.counterValue}>
+                {fare.toFixed(0)}
+              </Animated.Text>
+              <Text style={styles.counterLabel}>MMK</Text>
+            </View>
+
+            <View style={styles.counterItem}>
+              <Clock size={20} color="#F59E0B" />
+              <Text style={styles.counterValue}>{eta}</Text>
+              <Text style={styles.counterLabel}>ETA</Text>
+            </View>
+
+            <View style={styles.counterItem}>
+              <Zap size={20} color="#8B5CF6" />
+              <Text style={styles.counterValue}>{Math.round(speed)}</Text>
+              <Text style={styles.counterLabel}>km/h</Text>
+            </View>
+          </View>
+
+          {/* Control Buttons */}
+          <View style={styles.controlsContainer}>
+            {tripState.status === 'idle' && (
+              <View style={styles.idleControls}>
+                <Animated.View style={{ transform: [{ scale: buttonScaleAnim }] }}>
+                  <TouchableOpacity style={styles.startButton} onPress={startTrip}>
+                    <Play size={24} color="white" />
+                    <Text style={styles.startButtonText}>Start Trip</Text>
+                  </TouchableOpacity>
+                </Animated.View>
+                
+                {/* Cancel Button - Only show when order data is present */}
+                {showCancelButton && (
+                  <TouchableOpacity style={styles.cancelButton} onPress={handleCancelOrder}>
+                    <X size={20} color="#EF4444" />
+                    <Text style={styles.cancelButtonText}>Cancel Order</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {(tripState.status === 'active' || tripState.status === 'resting') && (
+              <View style={styles.activeControls}>
+                <TouchableOpacity
+                  style={[
+                    styles.controlButton,
+                    styles.restButton,
+                    tripState.status === 'resting' && styles.continueButton,
+                  ]}
+                  onPress={toggleRest}
+                >
+                  {tripState.status === 'resting' ? (
+                    <>
+                      <Play size={20} color="white" />
+                      <Text style={styles.controlButtonText}>Continue</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Pause size={20} color="white" />
+                      <Text style={styles.controlButtonText}>Rest</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.controlButton, styles.dropOffButton]}
+                  onPress={dropOff}
+                >
+                  <Square size={20} color="white" />
+                  <Text style={styles.controlButtonText}>Drop Off</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {tripState.status === 'completed' && (
+              <View style={styles.completedControls}>
+                <TouchableOpacity style={styles.resetButton} onPress={resetTrip}>
+                  <NavigationIcon size={20} color="white" />
+                  <Text style={styles.resetButtonText}>New Trip</Text>
+                </TouchableOpacity>
+                
+                {/* Cancel Button - Show after trip completion if order data exists */}
+                {showCancelButton && (
+                  <TouchableOpacity style={styles.cancelButton} onPress={handleCancelOrder}>
+                    <X size={20} color="#EF4444" />
+                    <Text style={styles.cancelButtonText}>Cancel Order</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
+        </Animated.View>
+      </ScrollView>
 
       {/* Custom Drop-off Dialog */}
       <DropoffDialog
@@ -542,6 +627,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   headerContainer: {
     backgroundColor: 'white',
@@ -664,6 +755,52 @@ const styles = StyleSheet.create({
     color: '#10B981',
     fontWeight: '600',
   },
+  noOrderCard: {
+    backgroundColor: 'white',
+    marginHorizontal: 16,
+    marginVertical: 8,
+    borderRadius: 12,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  noOrderIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  noOrderTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  noOrderText: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  goToOrdersButton: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  goToOrdersButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   mapContainer: {
     height: height * 0.45,
     position: 'relative',
@@ -757,6 +894,12 @@ const styles = StyleSheet.create({
   controlsContainer: {
     paddingBottom: 20,
   },
+  idleControls: {
+    gap: 12,
+  },
+  completedControls: {
+    gap: 12,
+  },
   startButton: {
     backgroundColor: '#10B981',
     flexDirection: 'row',
@@ -775,6 +918,27 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  cancelButton: {
+    backgroundColor: 'white',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#EF4444',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    gap: 6,
+  },
+  cancelButtonText: {
+    color: '#EF4444',
+    fontSize: 16,
+    fontWeight: '600',
   },
   activeControls: {
     flexDirection: 'row',

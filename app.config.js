@@ -14,10 +14,10 @@ export default {
     assetBundlePatterns: ['**/*'],
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'com.whiteheart.passenger'
+      bundleIdentifier: 'com.whiteheart.driver'
     },
     android: {
-      package: 'com.whiteheart.passenger',
+      package: 'com.whiteheart.driver',
       adaptiveIcon: {
         foregroundImage: './assets/images/adaptive-icon.png',
         backgroundColor: '#ffffff'
@@ -33,12 +33,7 @@ export default {
       ]
     },
     web: {
-      favicon: './assets/images/favicon.png',
-      config: {
-        alias: {
-          'react-native-maps': 'react-native-web'
-        }
-      }
+      favicon: './assets/images/favicon.png'
     },
     plugins: [
       'expo-router',

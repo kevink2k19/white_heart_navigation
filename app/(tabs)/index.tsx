@@ -473,7 +473,7 @@ export default function OrdersScreen() {
         </View>
 
         {/* Trip Details */}
-        <View style={styles.tripDetails}>
+        {/* <View style={styles.tripDetails}>
           <View style={styles.detailItem}>
             <Navigation size={16} color="#6B7280" />
             <Text style={styles.detailText}>{order.distance}</Text>
@@ -486,7 +486,7 @@ export default function OrdersScreen() {
             <DollarSign size={16} color="#10B981" />
             <Text style={[styles.detailText, styles.fareText]}>{order.fareAmount.toLocaleString()} MMK</Text>
           </View>
-        </View>
+        </View> */}
 
         {/* Action Buttons */}
         {!isProcessed && (
