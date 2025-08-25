@@ -159,7 +159,7 @@ export default function DropoffDialog({
                     Distance: {tripDetails.distance.toFixed(2)} km
                   </Text>
                   <Text style={styles.modalOrderText}>
-                    Duration: {tripDetails.duration}
+                    {Math.round((tripDetails.totalCost - 2000)).toLocaleString()} MMK
                   </Text>
                 </View>
 
@@ -274,7 +274,7 @@ export default function DropoffDialog({
                   accessibilityLabel="Cancel trip completion"
                   accessibilityRole="button"
                 >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                  <Text style={styles.fareValue}>2,000 MMK</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity 

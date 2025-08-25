@@ -139,7 +139,14 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
-
+        {/* Balance Box */}
+      <View style={styles.balanceCard}>
+        <Text style={styles.balanceLabel}>Balance</Text>
+        <Text style={styles.balanceValue}>MMK 120,000</Text>
+        <TouchableOpacity style={styles.topUpButton}>
+          <Text style={styles.topUpText}>Top Up</Text>
+        </TouchableOpacity>
+      </View>
         {/* Contact Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Contact Information</Text>
@@ -493,4 +500,41 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
   },
+  balanceCard: {
+  backgroundColor: 'white',
+  borderRadius: 16,
+  padding: 20,
+  marginBottom: 20,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.05,
+  shadowRadius: 6,
+  elevation: 2,
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+},
+balanceLabel: {
+  fontSize: 18,
+  fontWeight: '600',
+  color: '#1F2937',
+},
+balanceValue: {
+  fontSize: 20,
+  fontWeight: 'bold',
+  color: '#3B82F6',
+},
+topUpButton: {
+  backgroundColor: '#3B82F6',
+  paddingVertical: 8,
+  paddingHorizontal: 16,
+  borderRadius: 8,
+},
+topUpText: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: 'white',
+},
+
 });
+

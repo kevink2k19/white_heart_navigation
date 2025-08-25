@@ -38,6 +38,7 @@ import {
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Linking } from 'react-native';
+import GroupMemberModal from '@/components/GroupMemberModal';
 
 interface Message {
   id: string;
@@ -171,6 +172,7 @@ export default function MessagingScreen() {
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isPodcastMode, setIsPodcastMode] = useState(false);
+  const [showMemberModal, setShowMemberModal] = useState(false);
 
   // Order form state
   const [orderForm, setOrderForm] = useState<OrderData>({
@@ -766,8 +768,10 @@ export default function MessagingScreen() {
           <X size={24} color="#1F2937" />
         </TouchableOpacity>
         <View style={styles.chatHeaderInfo}>
-          <Text style={styles.chatTitle}>{selectedGroup?.name}</Text>
-          <Text style={styles.chatSubtitle}>{selectedGroup?.memberCount} members</Text>
+          <TouchableOpacity onPress={() => setShowMemberModal(true)}>
+            <Text style={styles.chatTitle}>{selectedGroup?.name}</Text>
+            <Text style={styles.chatSubtitle}>{selectedGroup?.memberCount} members • Tap to view</Text>
+          </TouchableOpacity>
         </View>
         <TouchableOpacity
           style={[styles.podcastToggle, isPodcastMode && styles.podcastToggleActive]}
@@ -880,6 +884,24 @@ export default function MessagingScreen() {
 
       {/* Order Form Modal */}
       {renderOrderForm()}
+
+      {/* Group Member Modal */}
+      <GroupMemberModal
+        visible={showMemberModal}
+        onClose={() => setShowMemberModal(false)}
+        groupName={selectedGroup?.name || ''}
+        groupId={selectedGroup?.id || ''}
+        members={[]}
+        currentUserId="current_user"
+        onCallMember={(memberId, phone) => {
+          handleCallCustomer(phone);
+          setShowMemberModal(false);
+        }}
+        onMessageMember={(memberId) => {
+          Alert.alert('Private Message', `Starting private chat with member ${memberId}`);
+          setShowMemberModal(false);
+        }}
+      />
     </View>
   );
 

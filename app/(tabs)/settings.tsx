@@ -67,19 +67,27 @@ export default function SettingsScreen() {
     router.push('/profile');
   };
 
-  const handleLogout = () => {
-    Alert.alert(
-      t('settings.logout'),
-      t('settings.logoutConfirm'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        { text: t('settings.logout'), style: 'destructive', onPress: () => {
-          // Handle logout logic here
-          Alert.alert(t('common.success'), t('settings.logoutSuccess'));
-        }},
-      ]
-    );
-  };
+const handleLogout = () => {
+  Alert.alert(
+    t('settings.logout'),
+    t('settings.logoutConfirm'),
+    [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('settings.logout'),
+        style: 'destructive',
+        onPress: async () => {
+          // TODO: clear tokens/session here (e.g., AsyncStorage/SecureStore)
+
+          // Important: point to /auth/login
+          router.replace('/auth/login');
+        },
+      },
+    ]
+  );
+};
+
+
 
   const settingSections = [
     {
