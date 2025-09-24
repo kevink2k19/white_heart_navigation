@@ -127,6 +127,10 @@ android {
     }
 }
 
+project.ext.react = [
+  nodeExecutableAndArgs: [project.findProperty("NODE_BINARY") ?: System.getenv("NODE_BINARY") ?: "/usr/local/bin/node"]
+]
+
 // Apply static values from `gradle.properties` to the `android.packagingOptions`
 // Accepts values in comma delimited lists, example:
 // android.packagingOptions.pickFirsts=/LICENSE,**/picasa.ini

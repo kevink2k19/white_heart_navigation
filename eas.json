@@ -11,6 +11,9 @@
       },
       "ios": {
         "buildConfiguration": "Debug"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://splendid-bravery-production.up.railway.app"
       }
     },
     "preview": {
@@ -21,6 +24,9 @@
       },
       "ios": {
         "buildConfiguration": "Release"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://splendid-bravery-production.up.railway.app"
       }
     },
     "production": {
@@ -30,6 +36,9 @@
       },
       "ios": {
         "buildConfiguration": "Release"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://splendid-bravery-production.up.railway.app"
       }
     }
   },
