@@ -77,7 +77,9 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@react-native-community/cli": "^20.0.2",
     "@react-native/gradle-plugin": "^0.81.1",
+    "@react-native/metro-config": "^0.81.1",
     "@types/babel__core": "^7.20.5",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",

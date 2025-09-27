@@ -279,10 +279,6 @@ export default function NavigationScreen() {
 
   // stop marker re-attachment churn (Android perf)
   const [markerTracksViewChanges, setMarkerTracksViewChanges] = useState(true);
-  useEffect(() => {
-    const id = setTimeout(() => setMarkerTracksViewChanges(false), 400);
-    return () => clearTimeout(id);
-  }, []);
 
   /* -------------------------------- Cleanup -------------------------------- */
   useEffect(() => {
@@ -329,30 +325,58 @@ export default function NavigationScreen() {
   }, [setEtaSafe, stopEtaTimer]);
 
   /* ------------------------ Permissions / initial loc ---------------------- */
-  useEffect(() => {
-    if (!canRender || Platform.OS === 'web') return;
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') return;
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        if (!isMountedRef.current) return;
+  useFocusEffect(
+    useCallback(() => {
+      let isCancelled = false;
+      (async () => {
+        if (!canRender || Platform.OS === 'web') return;
 
-        const coord = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
-        setCurrentCoordSafe(coord);
-        setRegion({ latitude: coord.latitude, longitude: coord.longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 });
-        prevCoordRef.current = coord;
+        try {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Location Permission Required', 'Please enable location services to use navigation features.');
+            return;
+          }
 
-        // seed animated marker
-        carAnimCoord.setValue({
-          latitude: coord.latitude,
-          longitude: coord.longitude,
-          latitudeDelta: 0.001,
-          longitudeDelta: 0.001,
-        });
-      } catch {}
-    })();
-  }, [canRender, carAnimCoord]);
+          let loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          if (!loc) {
+            const lastKnown = await Location.getLastKnownPositionAsync();
+            if (lastKnown) {
+              loc = lastKnown;
+            }
+          }
+
+          const coord = loc ?
+            { latitude: loc.coords.latitude, longitude: loc.coords.longitude } :
+            { latitude: DEFAULT_REGION.latitude, longitude: DEFAULT_REGION.longitude };
+
+          if (isCancelled) return;
+
+          setCurrentCoordSafe(coord);
+          setRegion({ ...coord, latitudeDelta: 0.05, longitudeDelta: 0.05 });
+          prevCoordRef.current = coord;
+
+          // Seed animated marker
+          carAnimCoord.setValue({
+            latitude: coord.latitude,
+            longitude: coord.longitude,
+            latitudeDelta: 0.001,
+            longitudeDelta: 0.001,
+          });
+        } catch (error) {
+          if (isCancelled) return;
+          console.error('Error fetching initial location:', error);
+          setCurrentCoordSafe({ latitude: DEFAULT_REGION.latitude, longitude: DEFAULT_REGION.longitude });
+          setRegion(DEFAULT_REGION);
+        }
+      })();
+
+      return () => {
+        isCancelled = true;
+        stopLocationWatch();
+      };
+    }, [canRender, carAnimCoord])
+  );
 
   /* -------------------------------- Compass -------------------------------- */
   useEffect(() => {
@@ -984,20 +1008,23 @@ export default function NavigationScreen() {
               )}
 
               {/* Animated vehicle marker */}
-            <Marker.Animated
-              key="car-marker"
-              coordinate={carAnimCoord as any}
-              anchor={{ x: 0.5, y: 0.5 }}
-              flat
-              rotation={carImageRotation}
-              tracksViewChanges={false}
-            >
-              <Image
-                source={carIcon}
-                style={{ width: 40, height: 20 }}
-                resizeMode="contain"
-              />
-            </Marker.Animated>      
+              {currentCoord && (
+                <Marker.Animated
+                  key="car-marker"
+                  coordinate={carAnimCoord as any}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  flat
+                  rotation={carImageRotation}
+                  tracksViewChanges={markerTracksViewChanges}
+                >
+                  <Image
+                    onLoad={() => setMarkerTracksViewChanges(false)}
+                    source={carIcon}
+                    style={{ width: 60, height: 30 }}
+                    resizeMode="contain"
+                  />
+                </Marker.Animated>
+              )}
 
               {originMarker && <Marker key="pickup" coordinate={originMarker} title="Pickup" />}
               {destMarker && <Marker key="dest" coordinate={destMarker} title="Destination" />}
